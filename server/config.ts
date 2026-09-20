@@ -1,31 +1,35 @@
 import { z } from "zod";
+import { SUPERVISOR_PROVIDER } from "../shared/supervision.js";
 
 export const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 const id = z.string().trim().min(1).regex(/^[A-Za-z0-9_-]+$/);
 const schema = z.object({
-  leadId: id,
-  supervisorId: id,
+  // Runtime-owned. The client synchronizes this after reading persisted plugin
+  // settings; it is deliberately never populated from daemon environment.
+  supervisorId: id.nullable().default(null),
   apiKey: z.string().trim().min(1).regex(/^[\x21-\x7e]+$/),
+  leadProvider: id.default("codex-lead"),
   peerProvider: id.default("codex-peer"),
-  peerIds: z.array(id).default([]),
   model: z.string().regex(/^jev-\d+\.\d+\.\d+$/).default("jev-1.13.0"),
   endpoint: z.literal(JEV_ENDPOINT).default(JEV_ENDPOINT),
   pendingDelayMs: z.coerce.number().int().min(1_000).max(86_400_000).default(60_000),
   alertConfidence: z.coerce.number().min(0.5).max(1).default(0.9),
-}).superRefine((c, ctx) => {
-  if (c.leadId === c.supervisorId || c.peerIds.includes(c.leadId) || c.peerIds.includes(c.supervisorId)) {
-    ctx.addIssue({ code: "custom", path: ["peerIds"], message: "Roles must be distinct" });
+}).superRefine((c, context) => {
+  if (c.leadProvider === c.peerProvider) {
+    context.addIssue({ code: "custom", path: ["peerProvider"], message: "Lead and Peer providers must be distinct" });
+  }
+  if (c.leadProvider === SUPERVISOR_PROVIDER || c.peerProvider === SUPERVISOR_PROVIDER) {
+    context.addIssue({ code: "custom", path: ["leadProvider"], message: "Supervisor provider must remain distinct" });
   }
 });
 export type Config = z.infer<typeof schema>;
 
 export function readConfig(env: NodeJS.ProcessEnv): Config {
   const result = schema.safeParse({
-    leadId: env.PASEO_SUPERVISION_LEAD_ID,
-    supervisorId: env.PASEO_SUPERVISION_SUPERVISOR_ID,
+    supervisorId: null,
     apiKey: env.JEV_API_KEY,
+    leadProvider: env.PASEO_SUPERVISION_LEAD_PROVIDER,
     peerProvider: env.PASEO_SUPERVISION_PEER_PROVIDER,
-    peerIds: env.PASEO_SUPERVISION_PEER_IDS?.split(","),
     endpoint: env.JEV_ENDPOINT,
     model: env.JEV_MODEL,
     pendingDelayMs: env.PASEO_SUPERVISION_PENDING_DELAY_MS,

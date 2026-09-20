@@ -82,7 +82,12 @@ export function createEvaluator(c: Config, http: typeof fetch = fetch): Evaluate
   return async (evidence, signal) => {
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), 15_000);
-    const combined = AbortSignal.any([signal, timeout.signal]);
+    const combinedController = new AbortController();
+    const abortCombined = () => combinedController.abort();
+    signal.addEventListener("abort", abortCombined, { once: true });
+    timeout.signal.addEventListener("abort", abortCombined, { once: true });
+    if (signal.aborted || timeout.signal.aborted) combinedController.abort();
+    const combined = combinedController.signal;
     try {
       if (combined.aborted) return null;
       const result = await http(c.endpoint, {
@@ -97,7 +102,11 @@ export function createEvaluator(c: Config, http: typeof fetch = fetch): Evaluate
       // Includes abort, network, malformed JSON, and max_tokens_exceeded errors.
       // No retries, keys, message text, error bodies, or raw exceptions in logs.
       return null;
-    } finally { clearTimeout(timer); }
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", abortCombined);
+      timeout.signal.removeEventListener("abort", abortCombined);
+    }
   };
 }
 

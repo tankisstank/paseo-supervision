@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { capture, isPeer } from "../server/communication.js";
+import { capture, isLead, isPeer } from "../server/communication.js";
 import { readConfig } from "../server/config.js";
 import { agent, brief, config, handback, leadTurn, peerTurn, send } from "./fixtures.js";
 
@@ -8,27 +8,29 @@ describe("configuration and room boundary", () => {
     expect(() => readConfig({ JEV_API_KEY: "PRIVATE VALUE" })).toThrow(/Invalid paseo-supervision/);
     try { readConfig({ JEV_API_KEY: "PRIVATE VALUE" }); } catch (error) { expect(String(error)).not.toContain("PRIVATE VALUE"); }
   });
+  it("never reads the Supervisor recipient from daemon environment", () => {
+    expect(readConfig({
+      JEV_API_KEY: "test",
+      PASEO_SUPERVISION_SUPERVISOR_ID: "hardcoded-supervisor",
+    }).supervisorId).toBeNull();
+  });
   it.each([
-    { PASEO_SUPERVISION_SUPERVISOR_ID: "lead" },
     { JEV_ENDPOINT: "https://attacker.invalid" }, { JEV_MODEL: "jev-latest" },
     { PASEO_SUPERVISION_PENDING_DELAY_MS: "NaN" }, { PASEO_SUPERVISION_PENDING_DELAY_MS: "0" },
     { PASEO_SUPERVISION_ALERT_CONFIDENCE: "1.1" }, { PASEO_SUPERVISION_ALERT_CONFIDENCE: "" },
-    { PASEO_SUPERVISION_PEER_IDS: "peer-a,supervisor" }, { PASEO_SUPERVISION_PEER_IDS: "" },
+    { PASEO_SUPERVISION_LEAD_PROVIDER: "codex-peer" },
+    { PASEO_SUPERVISION_LEAD_PROVIDER: "codex-supervisor" },
+    { PASEO_SUPERVISION_PEER_PROVIDER: "codex-supervisor" },
   ])("rejects invalid settings %j", (overrides) => {
-    expect(() => readConfig({ PASEO_SUPERVISION_LEAD_ID: "lead", PASEO_SUPERVISION_SUPERVISOR_ID: "supervisor", JEV_API_KEY: "test", ...overrides })).toThrow();
+    expect(() => readConfig({ PASEO_SUPERVISION_SUPERVISOR_ID: "supervisor", JEV_API_KEY: "test", ...overrides })).toThrow();
   });
-  it("uses parent identity, never cwd/workspace or provider alone", () => {
-    expect(isPeer(agent(), config)).toBe(true);
-    expect(isPeer(agent("peer-a", "other-lead"), config)).toBe(false);
-    expect(isPeer(agent("peer-a", null), config)).toBe(false);
-    expect(isPeer(agent("peer-a", "lead", "other-provider"), config)).toBe(false);
-    expect(isPeer(agent("supervisor"), config)).toBe(false);
-  });
-  it("supports an explicit legacy room allowlist while enforcing provider", () => {
-    const c = { ...config, peerIds: ["legacy-peer"] };
-    expect(isPeer(agent("legacy-peer", null), c)).toBe(true);
-    expect(isPeer(agent(), c)).toBe(false);
-    expect(isPeer(agent("legacy-peer", null, "other-provider"), c)).toBe(false);
+  it("discovers role and parent identity, never cwd/workspace or an ID allowlist", () => {
+    expect(isLead(agent("lead", null, "codex-lead"), config)).toBe(true);
+    expect(isPeer(agent(), "lead", config)).toBe(true);
+    expect(isPeer(agent("peer-a", "other-lead"), "lead", config)).toBe(false);
+    expect(isPeer(agent("peer-a", null), "lead", config)).toBe(false);
+    expect(isPeer(agent("peer-a", "lead", "other-provider"), "lead", config)).toBe(false);
+    expect(isPeer(agent("supervisor"), "lead", config)).toBe(false);
   });
 });
 
@@ -61,7 +63,7 @@ describe("communication extraction", () => {
     expect(capture(leadTurn([item]), config)).toMatchObject({ messages: [{ recipient: "peer-b" }], incomplete: false });
   });
   it("ignores non-room actors and non-completed outcomes", () => {
-    for (const a of [agent("supervisor"), agent("other", "other-lead"), agent("other", "lead", "jev")]) {
+    for (const a of [agent("supervisor"), agent("other", null), agent("other", "lead", "jev")]) {
       expect(capture({ ...peerTurn(), agent: a }, config)).toBeNull();
     }
     expect(capture({ ...peerTurn(), outcome: { kind: "failed", error: { message: "private" } } }, config)).toBeNull();

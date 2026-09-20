@@ -42,7 +42,9 @@ describe("Jev HTTP and local validation", () => {
   });
   it("does not call HTTP with an already aborted signal", async () => {
     const http = vi.fn<typeof fetch>();
-    expect(await createEvaluator(config, http)(evidence(), AbortSignal.abort())).toBeNull();
+    const stopped = new AbortController();
+    stopped.abort();
+    expect(await createEvaluator(config, http)(evidence(), stopped.signal)).toBeNull();
     expect(http).not.toHaveBeenCalled();
   });
   it.each(["unknown-choice", "nan", "range", "sum", "tie", "wrong-max", "missing-option", "extra-option", "missing-answer", "extra-error"])("rejects invalid response: %s", (kind) => {

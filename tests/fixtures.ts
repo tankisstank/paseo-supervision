@@ -5,10 +5,9 @@ import { readConfig } from "../server/config.js";
 import type { TurnEnded } from "../server/communication.js";
 import type { Assessment, Evidence } from "../server/jev.js";
 
-export const config = readConfig({
-  PASEO_SUPERVISION_LEAD_ID: "lead", PASEO_SUPERVISION_SUPERVISOR_ID: "supervisor",
+export const config = { ...readConfig({
   JEV_API_KEY: "test-not-a-real-key", PASEO_SUPERVISION_PENDING_DELAY_MS: "1000",
-});
+}), supervisorId: "supervisor" };
 export const brief = "Review candidate abc123 read-only. Return findings with evidence and limits. Reopen if inputs are missing.";
 export const handback = "REOPEN_REQUEST: candidate abc123 has no baseline. Cannot compare. Lead must provide the baseline. No write ownership retained.";
 export const disposition = "Resolve the missing baseline for the originating review: use base def456 with candidate abc123. Peer B owns review, return findings when complete. Peer A's blocker is resolved.";
@@ -70,8 +69,12 @@ export function evidence(): Evidence {
 export function mockContext() {
   const sendPrompt = vi.fn(async (_text: string) => {});
   const refresh = vi.fn(async (id: string) => ({ agent: {
-    id, provider: id === "outsider" ? "other-provider" : "codex-peer",
-    labels: { "paseo.parent-agent-id": id === "unrelated-peer" ? "other-lead" : "lead" },
+    id, provider: id === "supervisor" ? "codex-supervisor" : id.startsWith("lead") || id === "other-lead" ? "codex-lead" : id === "outsider" ? "other-provider" : "codex-peer",
+    ...(id === "supervisor" ? {
+      status: "idle" as "initializing" | "idle" | "running" | "error" | "closed",
+    } : {}),
+    archivedAt: null as string | null,
+    labels: { "paseo.parent-agent-id": id === "peer-2" ? "lead-2" : id === "unrelated-peer" ? "other-lead" : "lead" },
   } }));
   const ref = vi.fn((id: string) => ({ send: sendPrompt, refresh: () => refresh(id) }));
   const hookAbort = new AbortController();

@@ -8,16 +8,19 @@ export type TurnEnded = PluginLifecycleEvents["agent.turn_ended"];
 export type TurnStarted = PluginLifecycleEvents["agent.turn_started"];
 export interface Outbound { callId: string; recipient: string; prompt: string }
 export type Capture =
-  | { kind: "peer"; id: string; peerId: string; turnId: string | null; brief: string; handback: string }
-  | { kind: "lead"; id: string; turnId: string | null; messages: Outbound[]; incomplete: boolean };
+  | { kind: "peer"; id: string; leadId: string; peerId: string; turnId: string | null; brief: string; handback: string }
+  | { kind: "lead"; id: string; leadId: string; turnId: string | null; messages: Outbound[]; incomplete: boolean };
 
 export function fingerprint(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-export function isPeer(agent: Pick<PluginHookAgent, "id" | "parentAgentId" | "provider">, c: Config): boolean {
-  if (agent.id === c.leadId || agent.id === c.supervisorId || agent.provider !== c.peerProvider) return false;
-  return c.peerIds.length > 0 ? c.peerIds.includes(agent.id) : agent.parentAgentId === c.leadId;
+export function isLead(agent: Pick<PluginHookAgent, "id" | "provider">, c: Config): boolean {
+  return agent.id !== c.supervisorId && agent.provider === c.leadProvider;
+}
+
+export function isPeer(agent: Pick<PluginHookAgent, "id" | "parentAgentId" | "provider">, leadId: string, c: Config): boolean {
+  return agent.id !== c.supervisorId && agent.provider === c.peerProvider && agent.parentAgentId === leadId;
 }
 
 const sendInput = z.object({ agentId: z.string().min(1), prompt: z.string().min(1) });
@@ -32,19 +35,22 @@ export function latestTurn(timeline: readonly AgentTimelineItem[]): readonly Age
 
 export function capture(event: TurnEnded, c: Config): Capture | null {
   if (event.agent.id === c.supervisorId) return null;
-  if (event.agent.id !== c.leadId && !isPeer(event.agent, c)) return null;
+  const lead = isLead(event.agent, c);
+  const leadId = lead ? event.agent.id : event.agent.parentAgentId;
+  if (!lead && (leadId === null || !isPeer(event.agent, leadId, c))) return null;
+  if (leadId === null) return null;
   // A failed/canceled Lead turn can still contain successfully delivered sends.
   // Peer handbacks, unlike individual sends, require a completed turn.
-  if (event.agent.id !== c.leadId && event.outcome.kind !== "completed") return null;
+  if (!lead && event.outcome.kind !== "completed") return null;
   const turn = latestTurn(event.timeline);
   const first = turn[0];
   if (first?.type !== "user_message") return null;
-  if (event.agent.id !== c.leadId) {
+  if (!lead) {
     const final = turn.findLast((item) => item.type === "assistant_message");
     if (final?.type !== "assistant_message" || !first.text.trim() || !final.text.trim()) return null;
     return {
-      kind: "peer", peerId: event.agent.id, turnId: event.turnId,
-      id: fingerprint([event.agent.id, event.turnId, first.messageId, first.text, final.text]),
+      kind: "peer", leadId, peerId: event.agent.id, turnId: event.turnId,
+      id: fingerprint([leadId, event.agent.id, event.turnId, first.messageId, first.text, final.text]),
       brief: first.text, handback: final.text,
     };
   }
@@ -74,7 +80,7 @@ export function capture(event: TurnEnded, c: Config): Capture | null {
     messages.push({ callId: item.callId, recipient: parsed.data.agentId, prompt: parsed.data.prompt });
   }
   return {
-    kind: "lead", turnId: event.turnId,
+    kind: "lead", leadId, turnId: event.turnId,
     id: fingerprint([event.agent.id, event.turnId, first.messageId, messages, incomplete]),
     messages, incomplete,
   };

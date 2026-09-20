@@ -1,11 +1,11 @@
 {
   "name": "paseo-supervision",
   "version": "0.1.0",
-  "description": "Server-only communication protocol drift observer for Paseo rooms",
+  "description": "Dynamic communication protocol drift observer for Paseo rooms",
   "license": "Apache-2.0",
   "type": "module",
   "engines": { "node": ">=22.0.0" },
-  "files": ["paseo-plugin.json", "index.server.ts", "server", "docs", "README.md", "LICENSE"],
+  "files": ["paseo-plugin.json", "index.client.tsx", "index.server.ts", "client", "server", "shared", "docs", "README.md", "LICENSE"],
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -16,6 +16,9 @@
     "@getpaseo/plugin": "0.8.0",
     "@getpaseo/protocol": "0.8.0",
     "@types/node": "22.19.15",
+    "@types/react": "19.2.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
     "typescript": "5.9.3",
     "vitest": "4.1.6"
   }

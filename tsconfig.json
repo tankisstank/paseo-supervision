@@ -10,9 +10,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
+    "jsx": "react-jsx",
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": ["node", "react"],
     "noEmit": true
   },
-  "include": ["index.server.ts", "server/**/*.ts", "tests/**/*.ts"]
+  "include": ["index.client.tsx", "index.server.ts", "client/**/*.ts", "client/**/*.tsx", "server/**/*.ts", "shared/**/*.ts", "tests/**/*.ts"]
 }
