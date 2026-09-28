@@ -1,5 +1,5 @@
 {
   "id": "paseo-supervision",
   "description": "Suspected communication protocol drift alerts with a UI-selected Supervisor recipient",
-  "requirements": { "paseo": "^0.8.0" }
+  "requirements": { "paseo": "^0.10.0" }
 }
